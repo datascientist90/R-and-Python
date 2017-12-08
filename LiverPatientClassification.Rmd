@@ -1,0 +1,857 @@
+---
+output:
+  html_document: default
+  word_document: default
+---
+
+**LIVER PATIENT CLASSIFICATION**
+
+**INTRODUCTION**
+
+
+Liver is the largest internal organ in the human body,
+playing a major role in metabolism and serving several
+vital functions. The liver is the largest glandular organ of
+the body. It weighs about 3 lb (1.36 kg). The liver
+supports almost every organ in the body and is vital for
+our survival. Liver disease may not cause any symptoms
+at earlier stage or the symptoms may be vague, like
+weakness and loss of energy. Symptoms partly depend on
+the type and the extent of liver disease. Liver diseases are
+diagnosed based on the liver functional test.
+Classification techniques are very popular in various
+automatic medical diagnoses tools. Problems with liver
+patients are not easily discovered in an early stage as it
+will be functioning normally even when it is partially
+damaged. An early diagnosis of liver problems will
+increase patient's survival rate. Liver disease can be diagnosed by analyzing the levels of enzymes in the blood.
+Moreover, now a day's mobile devices are extensively
+used for monitoring human's body conditions. Here also,
+automatic classification algorithms are needed.
+
+
+**DATA DESCRIPTION**
+
+
+Databases of 583 records/entries are taken from the
+ILPD(Indian Liver Patient Dataset)Data set for the
+purpose of solving problem of this project. This dataset is
+downloaded from UCI machine Learning Repository. Entire ILPD dataset
+contains information about 583 Indian liver patients. In
+which 416 are liver patient records and 167 non liver
+patient records .The data set was collected from north
+east of Andhra Pradesh, India. Selector is a class label
+used to divide into groups (liver patient or not).
+
+
+
+Attribute Information:
+
+1. Age Age of the patient 
+2. Gender Gender of the patient 
+3. TB Total Bilirubin 
+4. DB Direct Bilirubin 
+5. Alkphos Alkaline Phosphotase 
+6. Sgpt Alamine Aminotransferase 
+7. Sgot Aspartate Aminotransferase 
+8. TP Total Proteins 
+9. ALB Albumin 
+10. A/G Ratio Albumin and Globulin Ratio 
+11. Selector field used to split the data into two sets (labeled by the experts) 
+
+
+
+
+**OBJECTIVE**
+
+The objective of this project is to work on a Liver Patient data set and demonstrate how classification techniques can predict based on diagnostic measurements whether a patient(Male/Female) is suffering from Liver or not. And, also which patients based on gender are likely to have the disease. 
+
+
+
+
+**MODELLING TECHNIQUE**
+
+Since the output variable Liver Result is a binary outcome, we need to use classification methods. We will split the data set into Train and Test. The predictive performance of the classifier will be judged by AUC metric. The following five classification techniques will be used.
+
+1. Logistic Regression
+2. Decision Tree
+3. Random Forest
+4. Support Vector Machines
+5. Artificial Neural Networks
+
+
+
+
+
+
+```{r}
+library(corrplot)
+library(dplyr)
+library(devtools)
+library(clusterGeneration)
+library(caret)
+library(psych)
+library(ggplot2)
+library(FSelector)
+library(ISLR)
+library(ROSE)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(e1071)
+library(nnet)
+library(ROCR)
+library(pROC)
+```
+
+
+
+**DATA IMPORTING**
+  
+Let us read in the data and examine it 
+
+
+```{r}
+# Importing the data into R
+Liver_1 <- read.csv(file.choose(),header=F)
+
+attach(Liver_1)
+```
+
+Check the dimensions for the data set Liver_1
+```{r}
+dim(Liver_1)
+```
+
+
+Replacing the header names in the data frame
+
+```{r}
+names(Liver_1) <- c("Age","Gender","Total_Bilirubin","Direct_Bilirubin", "Alkaline_Phosphotase","Alamine_Aminotransferase",
+"Aspartate_Aminotransferase","Total_Protiens","Albumin",
+"Albumin_and_GlobulinRatio", "LiverResult" )
+```
+
+
+**DATA EXPLORATION**
+
+
+```{r}
+# Exploratory Data Analysis
+head(Liver_1,10) # first 10 lines 
+str(Liver_1) # structure of the data
+```
+
+
+Here, We replace the Non-Liver value (2) to (0)
+
+```{r}
+table(Liver_1$LiverResult) # Frequency table of Liver and Non-Liver results
+Liver_1$LiverResult[Liver_1$LiverResult==2] <- 0 # Replacing Non-Liver value (2) to zero
+```
+
+
+
+```{r}
+# Checking for the converted factor in a frequency table 
+table(Liver_1$LiverResult) 
+```
+
+
+
+```{r}
+# To check for outliers and missing values.
+# Descriptive Statistics of the Liver Table
+summary(Liver_1)
+```
+
+
+```{r}
+# Frequency table of Gender along with Liver and Non-Liver results
+(table(Liver_1$LiverResult))
+(table(Liver_1$Gender))
+```
+
+
+
+
+Explore the relationship between LiverResult and Gender
+
+
+```{r}
+# CrossTablulate in LiverResult and Gender
+# 2 - way contingency table 
+(TAB <- xtabs(~LiverResult+Gender,Liver_1))
+bplt <- barplot(TAB,beside=TRUE,legend.text=c("Non Liver","Liver"),xlab="Gender",ylab="Liver Results (Count) ",las=1,col=c(2,4))
+text(x = bplt+0.05, y = TAB, label = TAB, pos = 3, cex = 0.8,xpd=TRUE)
+```
+
+
+
+```{r}
+# Convert the table into percentage form
+round(prop.table(xtabs(~LiverResult+Gender,Liver_1))*100,digits=1)
+```
+
+
+
+
+
+
+Convert the nominal variables into a Numerical Factor
+
+```{r}
+Liver_1$Gender <- factor(Liver_1$Gender,levels=c("Female","Male"),labels=c(0,1))
+levels(Liver_1$Gender)
+
+
+Liver_1$LiverResult <- factor(Liver_1$LiverResult) # Converting Liver Result into a factor
+```
+
+
+
+Let's us check the structure of the data again
+
+```{r}
+str(Liver_1)
+```
+
+
+
+
+```{r}
+# Scatterplot,Histogram matrix along with Pearson correlation
+pairs.panels(Liver_1,pch=19,cor=FALSE,hist.col="gray",ellipses=FALSE,main="Liver Data by Liver Results")
+
+```
+
+
+
+**DATA PREPARATION**
+
+
+
+```{r}
+# Output the number of missing values for each column
+sapply(Liver_1,function(x) sum(is.na(x)))
+```
+
+
+
+
+```{r}
+# Check for rows that have NA's for each column.
+filter(Liver_1, is.na(Liver_1$Albumin_and_GlobulinRatio))
+```
+
+
+
+Substitute the missing values with the median
+
+```{r}
+# Taking care of the missing values
+# Using it manually either by mean or median. 
+Liver_1$Albumin_and_GlobulinRatio[is.na(Liver_1$Albumin_and_GlobulinRatio)] <- median(Liver_1$Albumin_and_GlobulinRatio, na.rm = T)
+```
+
+
+
+
+```{r}
+# Check if any NA's is present or not
+anyNA(Liver_1$Albumin_and_GlobulinRatio) 
+```
+
+
+
+
+```{r}
+# Check the summary again
+# Combining the scale and center transforms will standardize your data. 
+# Attributes will have a mean value of 0 and a standard deviation of 1.
+summary(Liver_1)
+# calculate the pre-process parameters from the dataset
+process <- preProcess(Liver_1, method=c("center","scale"))
+# summarize transform parameters
+print(process)
+# transform the dataset using the parameters
+Liver_1_transformed <- predict(process,Liver_1)
+# summarize the transformed dataset
+summary(Liver_1_transformed)
+```
+
+
+
+
+Check for the variables that are correlated with each other and print out the variables that are highly correlated
+
+```{r}
+# Check for any attribute that have a factor or not.
+sapply(Liver_1_transformed, is.factor)
+# We can see a few columns of type 'factor'. And, we can remove those columns from our data frame and create the correlation matrix.
+Corrd <- cor(Liver_1_transformed[sapply(Liver_1_transformed, function(x) !is.factor(x))])
+print(Corrd,digits=2)
+# Plot the correlation 
+corrplot(Corrd, method='circle')
+# Search for the Highly correlated variables having absolute correlation of 0.7 or higher.
+HighlyCorrelated <- findCorrelation(Corrd, cutoff=0.75,verbose = TRUE,names=TRUE)
+print(HighlyCorrelated)
+```
+
+
+
+
+
+
+**PARTITIONING THE DATA**
+
+
+
+Since we will be using 5 modelling techniques it is essential that we ensure that evaluate the outputs across the 5 techniques correctly. We will set the seed for creating the train and test partitions, and use exactly the same test data to check the model performance. 
+
+
+```{r}
+# Partitioning the data into 70:30 ratio
+# 70 % of Training Data and 30 % of Test Data
+set.seed(1234)
+
+Ind <- 1:nrow(Liver_1_transformed)
+Trainindex <- sample(Ind, floor(0.70 * nrow(Liver_1_transformed)))
+Train <- Liver_1_transformed[Trainindex,]
+Test <- Liver_1_transformed[-Trainindex,]
+nrow(Train)
+nrow(Test)
+```
+
+
+
+Now we are ready to proceed to the modelling phase
+
+**MODELLING**
+
+We will be fitting 5 models - Logistic Regression, Decision Tree, Random Forest, Support Vector Machines and Neural Networks.
+
+
+For model evaluation purpose, we will plot the ROC curve and calculate the AUC metric on the test data. At the end, we will compare the AUC from all five approaches and select the one which has the maximum AUC. 
+
+
+We will now build all the five models each based on a different algorithm, starting first with a Logistic Regression
+
+
+*1.LOGISTIC REGRESSION*
+
+
+```{r}
+# Fitting a Logit Model
+LogitModel0 <- glm(LiverResult~.,family=binomial(link='logit'),data=Train)
+summary(LogitModel0)
+```
+
+
+
+Interpreting the results of our logistic regression model
+
+Now we can analyze the fitting and interpret what the model is telling us.
+First of all, we can see that Gender1,Direct_Bilirubin,Alkaline_Phosphotase and Aspartate_Aminotransferase are not statistically significant. So,we keep it in the model.Remember that in the logit model the response variable is log odds: ln(odds) = ln(p/(1-p)) = a*x1 + b*x2 + . + z*xn. Since gender is a dummy variable, being gender reduces the log odds by 0.2976 while a unit increase in age increases the log odds by 0.3484.
+
+
+
+Now we can run the anova() function on the model to analyze the table of deviance
+```{r}
+# Now we can run the anova() function on the model to analyze the table of deviance
+# Analysis of deviance
+anova(LogitModel0,test = "Chisq")
+```
+
+
+
+
+The difference between the null deviance and the residual deviance shows how our model is doing against the null model (a model with only the intercept). The wider this gap, the better. Analyzing the table we can see the drop in deviance when adding each variable one at a time.  The other variables seem to improve the model less even though Total_Bilirubin and Alamine_Aminotransferase has a low p-value. A large p-value here indicates that the model without the variable explains more or less the same amount of variation. Ultimately what you would like to see is a significant drop in deviance and the AIC.
+
+
+
+Assessing the predictive ability of the model
+
+In the steps above, we briefly evaluated the fitting of the model, now we would like to see how the model is doing when predicting y on a new set of data. By setting the parameter type='response', R will output probabilities in the form of P(y=1|X). Our decision boundary will be 0.5. If P(y=1|X) > 0.5 then y = 1 otherwise y=0. Note that for some applications different decision boundaries could be a better option.
+
+
+```{r}
+# Assessing the predictive ability of the model
+# If prob > 0.5 then 1, else 0. Threshold can be set for better results
+predict1 <- predict(LogitModel0,newdata=Test,type='response')
+predict1 <- ifelse(predict1 > 0.5,1,0)
+
+L.tab <- table(Actual=Test$LiverResult,Predicted=predict1)
+print(L.tab)
+```
+
+
+As the confusion matrix shows, our model is predicting 12+116=128 cases correctly. That is an overall accuracy of 73.1%
+There are 41 cases which have been predicted incorrectly, the false positives, i.e. for 41 cases our model predicted them to be having a disease when actually they don't have the disease.
+
+
+
+
+```{r}
+# Calculate Misclassification and Accuracy
+misclassificationError <- 1 - sum(diag(L.tab))/sum(L.tab)
+accuracy <- sum(diag(L.tab))/sum(L.tab)
+print(paste('MissClassification Erorr', misclassificationError))
+print(paste('Accuracy',accuracy))
+```
+
+The 0.731 accuracy on the test set is quite a good result.
+
+
+
+```{r}
+# Output the Recall and Precision 
+accuracy_LR <- accuracy.meas(response=Test$LiverResult,predicted=predict1)
+print(accuracy_LR)
+```
+
+
+As a last step, we are going to plot the ROC curve and calculate the AUC (area under the curve) which are typical performance measurements for a binary classifier.
+The ROC is a curve generated by plotting the true positive rate (TPR) against the false positive rate (FPR) at various threshold settings while the AUC is the area under the ROC curve. As a rule of thumb, a model with good predictive ability should have an AUC closer to 1 (1 is ideal) than to 0.5.
+
+
+```{r}
+# Plot the ROC Curve
+#ROC Analysis for test data
+L.p <- predict(LogitModel0,newdata=Test,type='response')
+L.pr <- prediction(L.p,Test$LiverResult)
+L.roc <-performance(L.pr,measure="tpr",x.measure="fpr")
+plot(L.roc,lwd=2,col="orange",xlab="1-Specificity",ylab="Sensitivity",main="ROC - Logistic Regression on Liver Result")
+abline(a=0,b=1)
+
+# AUC Curve
+L.auc <- performance(L.pr,measure="auc")@y.values[[1]]
+print(L.auc,digits = 2)
+auc_l <- round(L.auc,2)
+legend(x=0.56,y=0.3,auc_l,title="AUC",cex=0.7,text.font=1)
+```
+
+
+
+
+
+*2. DECISION TREE*
+
+```{r}
+# Fitting a Tree
+DTModel1 <- rpart(LiverResult~.,data=Train,method = "class",control=rpart.control(mincriterion=0.95,minsplit =100))
+print(DTModel1)
+```
+
+
+
+
+```{r}
+#Plotting the tree
+rpart.plot(DTModel1,extra=2,fallen.leaves = TRUE,cex=0.9)
+
+summary(DTModel1)
+```
+
+The variable which the tree splits upon in the first level is 'Direct_Bilirubin', followed by 'Alamine_Aminotransferase', indicating these are the most important variables.
+
+
+```{r}
+# Making Predictions and Confusion Matrix
+predict2 <- predict(DTModel1,newdata=Test,type='prob')
+predict2 <- ifelse(predict2 > 0.5,1,0)
+DT.tab <- table(Actual=Test$LiverResult,Predicted=predict2[,2])
+print(DT.tab)
+```
+
+As the confusion matrix shows, our model is predicting 6+112=118 cases correctly. That is an overall accuracy of 67.4%
+There are 47 cases which have been predicted incorrectly, the false positives, i.e. for 47 cases our model predicted them to be having a disease when actually they don't have the disease.
+
+
+```{r}
+# Calculate Misclassification and Accuracy
+misclassificationError_1 <- 1 - sum(diag(DT.tab))/sum(DT.tab)
+accuracy_1 <- sum(diag(DT.tab))/sum(DT.tab)
+print(paste('MissClassification Erorr', misclassificationError_1))
+print(paste('Accuracy',accuracy_1))
+```
+
+
+```{r}
+# Output the Recall and Precision
+accuracy_DT <- accuracy.meas(response=Test$LiverResult,predicted=predict2[,2])
+print(accuracy_DT)
+```
+
+
+
+```{r}
+#Plot the ROC Curve
+#ROC Analysis for test data
+DT.p <- predict(DTModel1,newdata=Test,type='prob')
+DT.pr <- prediction(DT.p[,2],Test$LiverResult)
+DT.roc <- performance(DT.pr,measure="tpr",x.measure="fpr")
+plot(DT.roc,lwd=2,col="black",xlab="1-Specificity",ylab="Sensitivity",main="ROC - Decision Tree on Liver Result")
+abline(a=0,b=1)
+
+# AUC Curve
+DT.auc <- performance(DT.pr,measure="auc")@y.values[[1]]
+print(DT.auc)
+auc_2 <- round(DT.auc,2)
+legend(x=0.56,y=0.2,auc_2,title="AUC",cex=0.7,text.font=1)
+```
+
+
+*3. RANDOM FOREST*
+
+
+```{r}
+#Fitting the RF Model
+set.seed(222)
+RfModel2 <- randomForest(LiverResult~.,data=Train,ntree=250,mtry=4,importance=TRUE)
+print(RfModel2)
+```
+
+
+
+```{r}
+# Calculate Variable Importance
+attr.scores <- random.forest.importance(LiverResult~ ., data=Train)
+print(attr.scores)
+cutoff.biggest.diff(attr.scores)
+
+importance(RfModel2)
+```
+
+
+
+
+```{r}
+# Making Predictions and Confusion Matrix
+predict3 <- predict(RfModel2,newdata=Test,type='prob')
+predict3 <- ifelse(predict3 > 0.5,1,0)
+RF.tab <- table(Actual=Test$LiverResult,Predicted=predict3[,2])
+print(RF.tab)
+```
+
+
+As the confusion matrix shows, our model is predicting 20+110=130 cases correctly. That is an overall accuracy of 74.3%
+There are 33 cases which have been predicted incorrectly, the false positives, i.e. for 33 cases our model predicted them to be having a disease when actually they don't have the disease.
+
+
+
+
+```{r}
+# Calculate Misclassification and Accuracy
+misclassificationError_2 <- 1 - sum(diag(RF.tab))/sum(RF.tab)
+accuracy_2 <- sum(diag(RF.tab))/sum(RF.tab)
+print(paste('MissClassification Erorr', misclassificationError_2))
+print(paste('Accuracy',accuracy_2))
+```
+
+
+
+
+```{r}
+# Output the Recall and Precision
+accuracy_RF <- accuracy.meas(response=Test$LiverResult,predicted=predict3[,2])
+print(accuracy_RF)
+```
+
+
+```{r}
+#Plot the ROC Curve
+#ROC Analysis for test data
+RF.p <- predict(RfModel2,newdata=Test,type='prob')
+RF.pr <- prediction(RF.p[,2],Test$LiverResult)
+RF.roc <-performance(RF.pr,measure="tpr",x.measure="fpr")
+plot(RF.roc,lwd=2,col="red",xlab="1-Specificity",ylab="Sensitivity",main="ROC - Random Forest on Liver Result")
+abline(a=0,b=1)
+
+# AUC Curve
+RF.auc <- performance(RF.pr,measure="auc")@y.values[[1]]
+print(RF.auc)
+auc_3 <- round(RF.auc,2)
+legend(x=0.56,y=0.2,auc_3,title="AUC",cex=0.7,text.font=1)
+```
+
+
+
+
+
+```{r}
+
+# Let's plot the graph for checking where it is linear or non-linear
+par(mfrow=c(3,3))
+qplot(Age,Gender,data=Train,color=LiverResult,main="Checking for Linear Dependency - 1")
+qplot(Age,Total_Bilirubin,data=Train,color=LiverResult,main="Checking for Linear Dependency - 2")
+qplot(Total_Bilirubin,Direct_Bilirubin,data=Train,color=LiverResult,main="Checking for Linear Dependency - 3")
+qplot(Alkaline_Phosphotase,Alamine_Aminotransferase,data=Train,color=LiverResult,main="Checking for Linear Dependency - 4")
+qplot(Aspartate_Aminotransferase,Total_Protiens,data=Train,color=LiverResult,main="Checking for Linear Dependency - 5")
+qplot(Albumin,Albumin_and_GlobulinRatio,data=Train,color=LiverResult,main="Checking for Linear Dependency - 6")
+qplot(Age,Direct_Bilirubin,data=Train,color=LiverResult,main="Checking for Linear Dependency - 7")
+qplot(Aspartate_Aminotransferase,Alamine_Aminotransferase,data=Train,color=LiverResult,main="Checking for Linear Dependency - 8")
+qplot(Alkaline_Phosphotase,Aspartate_Aminotransferase,data=Train,color=LiverResult,main="Checking Linear Dependency - 9")
+```
+
+
+
+
+*4. SUPPORT VECTOR MACHINES*  
+
+```{r}
+# Fitting the SVM Model
+SVMModel3 <- svm(LiverResult~.,Kernel="radial",cost=1000,gamma=0.5,data=Train,probability=TRUE,scale=FALSE)
+summary(SVMModel3)
+
+plot(SVMModel3,data=Train,Albumin~Albumin_and_GlobulinRatio)
+```
+
+
+
+
+```{r}
+# Making Predictions and Confusion Matrix
+predict4 <- predict(SVMModel3,newdata=Test,probability = TRUE)
+plot(predict4)
+SVM.tab <- table(Actual=Test$LiverResult,Predicted=predict4)
+print(SVM.tab)
+```
+
+
+
+As the confusion matrix shows, our model is predicting 121+3=124 cases correctly. That is an overall accuracy of 70.9%
+There are 50 cases which have been predicted incorrectly, the false positives, i.e. for 50 cases our model predicted them to be having a disease when actually they don't have the disease.
+
+
+
+
+```{r}
+# Calculate Misclassification and Accuracy
+misclassificationError_3 <- 1 - sum(diag(SVM.tab))/sum(SVM.tab)
+accuracy_3 <- sum(diag(SVM.tab))/sum(SVM.tab)
+print(paste('MissClassification Erorr', misclassificationError_3))
+print(paste('Accuracy',accuracy_3))
+```
+
+
+
+
+```{r}
+# Output the Recall and Precision 
+accuracy_SVM <- accuracy.meas(response=Test$LiverResult,predicted=attr(predict4,"probabilities")[,1])
+print(accuracy_SVM)
+```
+
+
+
+
+```{r}
+#Plot the ROC Curve
+#ROC Analysis for test data
+SVM.p <- predict(SVMModel3,newdata=Test,probability = TRUE)
+SVM.pr <- attr(SVM.p,"probabilities")[,1]
+SVM.pr <- prediction(SVM.pr,Test$LiverResult)
+SVM.roc <- performance(SVM.pr,measure="tpr",x.measure="fpr")
+plot(SVM.roc,lwd=2,col="violet",xlab="1-Specificity",ylab="Sensitivity",main="ROC - SVM on Liver Result")
+abline(a=0,b=1)
+
+# AUC Curve
+SVM.auc <- performance(SVM.pr,measure="auc")@y.values[[1]]
+print(SVM.auc)
+auc_4 <- round(SVM.auc,2)
+legend(x=0.56,y=0.2,auc_4,title="AUC",cex=0.7,text.font=1)
+```
+
+
+*5. ARTIFICIAL NEURAL NETWORK*  
+
+
+```{r}
+# Fitting a ANN Model
+set.seed(123)
+LiverResult <- class.ind(Train$LiverResult)
+head(LiverResult)
+ANNModel4 <- nnet(LiverResult~.,data=Train[,-11],size=5,decay=0.05,maxit=200,softmax=TRUE,linout=FALSE,trace=TRUE)
+```
+
+
+
+
+```{r}
+# Display summary of weights 
+summary(ANNModel4)
+```
+
+
+
+
+
+```{r include=FALSE}
+# Import the function from GitHub for plotting
+source_url('https://gist.githubusercontent.com/fawda123/7471137/raw/466c1474d0a505ff044412703516c34f1a4684a5/nnet_plot_update.r')
+```
+
+
+
+
+
+```{r}
+# Plotting the Neural Network
+plot.nnet(ANNModel4)
+```
+
+
+
+
+```{r}
+# Making Predictions and Confusion Matrix
+predict5 <- predict(ANNModel4,newdata=Test,type="raw")
+predict5 <- ifelse(predict5 > 0.5,1,0)
+ANN.tab <- table(Actual=Test$LiverResult,Predicted=predict5[,2])
+print(ANN.tab)
+```
+
+
+As the confusion matrix shows, our model is predicting 25+96=121 cases correctly. That is an overall accuracy of 69.1%
+There are 28 cases which have been predicted incorrectly, the false positives, i.e. for 28 cases our model predicted them to be having a disease when actually they don't have the disease.
+
+
+```{r}
+# Calculate Misclassification and Accuracy
+misclassificationError_4 <- 1 - sum(diag(ANN.tab))/sum(ANN.tab)
+accuracy_4 <- sum(diag(ANN.tab))/sum(ANN.tab)
+print(paste('MissClassification Erorr', misclassificationError_4))
+print(paste('Accuracy',accuracy_4))
+```
+
+
+
+```{r}
+# Output the Recall and Precision 
+accuracy_NN <- accuracy.meas(response=Test$LiverResult,predicted=predict5[,2])
+print(accuracy_NN)
+```
+
+
+
+
+
+
+```{r}
+#Plot the ROC Curve
+#ROC Analysis for test data
+ANN.p <- predict(ANNModel4,newdata=Test,type="raw")
+ANN.pr <- prediction(ANN.p[,2],Test$LiverResult)
+ANN.roc <- performance(ANN.pr,measure="tpr",x.measure="fpr")
+plot(ANN.roc,lwd=2,col="dark blue",xlab="1-Specificity",ylab="Sensitivity",main="ROC - Neural Network on Liver Result")
+abline(a=0,b=1)
+
+# AUC Curve
+ANN.auc <- performance(ANN.pr,measure="auc")@y.values[[1]]
+print(ANN.auc)
+auc_5 <- round(ANN.auc,2)
+legend(x=0.56,y=0.2,auc_5,title="AUC",cex=0.7,text.font=1)
+```
+
+
+
+
+**MODEL ASSESSMENT**
+
+
+```{r}
+# Compare the accuracy of five models
+# Round the values and print the accuracy table of 4 models
+RoundedAccuracy <- round(c(accuracy,accuracy_1,accuracy_2,accuracy_3,accuracy_4)*100 ,1)
+Accuracy <- data.frame(Method = c("Logistic Regression","Decision Tree", "Random forest","Support Vector Machine","Artificial Neural Network"),
+                         Accuracy = RoundedAccuracy)
+# Print the accuracy
+print(Accuracy)
+```
+
+
+
+                    Method      Accuracy
+   1      Logistic Regression      73.1
+   2            Decision Tree      67.4
+   3            Random forest      74.3
+   4   Support Vector Machine      70.9
+   5  Artifical Neural Network     69.1
+
+
+
+
+We see Random Forest has a better accuracy as compared to other models.
+Random Forest performs better than the other models.
+
+
+
+
+
+
+Now, let's plot the ROC Chart for 5 models and print out the AUC Values and compare its AUC Values with five models and see which one performs better.
+
+
+```{r}
+# ROC Curve of 5 Models
+# Plot ROC Curve of 5 models
+plot(L.roc,col="orange",xlab="1-Specificity",ylab="Sensitivity",lwd=3)
+plot(DT.roc,add=TRUE,col="black",xlab="1-Specificity",ylab="Sensitivity",lwd=3)
+plot(RF.roc,add=TRUE,col="red",xlab="1-Specificity",ylab="Sensitivity",lwd=3)
+plot(SVM.roc,add=TRUE,col="violet",xlab="1-Specificity",ylab="Sensitivity",lwd=3)
+plot(ANN.roc,add=TRUE,col="dark blue",xlab="1-Specificity",ylab="Sensitivity",lwd=4)
+title(main="ROC Curve of 5 models", font.main=2)
+legend(x=0.6,y=0.5, c("Logistic Regression","Decision Tree","Random Forest","SVM","ANN"), cex=0.6,
+   col=c("orange","black","red","violet","dark blue"),pch=19)
+abline(a=0,b=1)
+
+
+# Print the AUC Values of 5 models and rounded values
+RoundedAUC <- round(c(L.auc,DT.auc,RF.auc,SVM.auc,ANN.auc)*100 ,2)
+
+AUC <- data.frame(Method = c("Logistic Regression","Decision Tree", "Random forest","Support Vector Machine","Artificial Neural Network"),
+                           AUC = RoundedAUC)
+# Print the AUC
+print(AUC)
+```
+
+
+
+
+**RESULTS**
+
+So we have now run all the models and obtained AUC measures for each. Let us compare the AUC and choose the one which performs the best!
+
+1. Logistic Regression AUC = 74.76
+2. Decision Tree AUC = 68.25
+3. Random Forest AUC = 76.50
+4. Support Vector Machine AUC = 63.30
+5. Artificial Neural Network AUC = 74.02
+
+The model fitted with Random Forest classification gives the highest AUC value of 76.50 which is our selected model. 
+
+
+
+
+**EXPORT THE DATA**
+
+
+Now, we export the scores(or predictions) to a csv file and save it in the working directory.
+
+
+```{r}
+# Export predictions (previous RF model) to a csv file. 
+write.csv(RF.p, file = "C:/Users/Abhishek Arora/Desktop/Random Forest.csv")
+```
+
+
+
+
+
+**CONCLUSION**
+
+In our conclusion, we used 5 different modeling techniques and choose the one which gave us the best predictive accuracy. The model's performance is not really satisfying as there are too many false-positives. So,out of five modeling algorithms, Random Forest performs better in terms of accuracy and AUC values. The model can help to detect whether the patients have the disease or not. This can also help to increase the patient's lifespan.
+
+
+
